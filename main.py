@@ -27,8 +27,17 @@ class LazyBot:
         async def on_ready():
             logger.info(f"Loaded {self.loaded_cogs} cogs")
             logger.success(f"{self.bot.user} is now online! ✅")
-
-CA        """Load all cog files from the cogs directory"""
+            
+            # Set bot activity
+            await self.bot.change_presence(
+                activity=nextcord.Activity(
+                    type=nextcord.ActivityType.watching,
+                    name=f"{len(self.bot.guilds)} servers"
+                )
+            )
+    
+    def _load_cogs(self):
+        """Load all cog files from the cogs directory"""
         for filename in os.listdir("./cogs"):
             if filename.endswith(".py") and not filename.startswith("_"):
                 try:

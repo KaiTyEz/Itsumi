@@ -52,7 +52,7 @@ class ErrorHandler(commands.Cog):
             error_message = f"```\n{usage}\n"
             param_position = usage.find(f"<{error.param.name}>")
             if param_position != -1:
-                spaces = "  " * param_position
+                spaces = " " * param_position
                 error_message += f"{spaces}^^^^\n"
             error_message += "```"
             

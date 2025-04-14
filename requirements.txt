@@ -3,3 +3,4 @@ python-dotenv>=1.0.0
 googletrans==3.1.0a0
 aiosqlite>=0.19.0 
 pytimeparse
+requests>=2.31.0
