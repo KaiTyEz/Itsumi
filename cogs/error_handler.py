@@ -1,123 +1,192 @@
 import nextcord
-import sys
-import traceback
 from nextcord.ext import commands
 from utils.katlog import logger
+import traceback
+import sys
+import datetime
 
 class ErrorHandler(commands.Cog):
+    """Handles errors for all commands"""
+
     def __init__(self, bot):
         self.bot = bot
-        
+        self.error_webhook_url = "YOUR_WEBHOOK_URL"  # Replace with your webhook URL
+
+    async def send_error_webhook(self, error, ctx):
+        """Send error details to webhook"""
+        try:
+            webhook = nextcord.Webhook.from_url(self.error_webhook_url, adapter=nextcord.AsyncWebhookAdapter(self.bot))
+            
+            # Create a detailed error embed
+            embed = nextcord.Embed(
+                title="🚨 Command Error",
+                color=0xFF0000,
+                timestamp=datetime.datetime.now()
+            )
+            
+            # Add command information
+            embed.add_field(
+                name="Command",
+                value=f"```{ctx.command}```",
+                inline=False
+            )
+            
+            # Add error information
+            embed.add_field(
+                name="Error Type",
+                value=f"```{type(error).__name__}```",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="Error Message",
+                value=f"```{str(error)}```",
+                inline=True
+            )
+            
+            # Add context information
+            embed.add_field(
+                name="Channel",
+                value=f"<#{ctx.channel.id}> ({ctx.channel.name})",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="User",
+                value=f"<@{ctx.author.id}> ({ctx.author.name}#{ctx.author.discriminator})",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="Guild",
+                value=f"{ctx.guild.name} ({ctx.guild.id})",
+                inline=True
+            )
+            
+            # Add message content
+            if ctx.message.content:
+                embed.add_field(
+                    name="Message Content",
+                    value=f"```{ctx.message.content[:1000]}```",
+                    inline=False
+                )
+            
+            # Add traceback
+            tb = ''.join(traceback.format_exception(type(error), error, error.__traceback__))
+            if len(tb) > 1000:
+                tb = tb[:997] + "..."
+            embed.add_field(
+                name="Traceback",
+                value=f"```py\n{tb}```",
+                inline=False
+            )
+            
+            await webhook.send(embed=embed)
+        except Exception as e:
+            logger.error(f"Failed to send error webhook: {e}")
+
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
-        """The event triggered when an error is raised while invoking a command."""
-        
-        if hasattr(ctx.command, 'on_error'):
-            return
-        
-        error = getattr(error, 'original', error)
-        
-    
-        embed = nextcord.Embed(
-            title="Command Error",
-            color=nextcord.Color.red()
-        )
-        
-        command_name = ctx.command.name if ctx.command else "Unknown"
-        
-        embed.set_footer(text=f"Command: {ctx.prefix}{command_name}")
-        
-        if isinstance(error, commands.CommandNotFound):
-    
-            embed.description = "Command not found"
-            embed.add_field(name="Message", value=f"```\n{ctx.message.content}\n```", inline=False)
-            embed.add_field(name="Suggestion", value="Use the help command to see available commands", inline=False)
-            
-        elif isinstance(error, commands.DisabledCommand):
-            embed.description = f"The command `{command_name}` has been disabled."
-            
-        elif isinstance(error, commands.NoPrivateMessage):
-            embed.description = "This command cannot be used in private messages."
-            
-        elif isinstance(error, commands.MissingRequiredArgument):
-            
-            usage = f"{ctx.prefix}{command_name}"
-            for param in ctx.command.params.values():
-                if param.name not in ('self', 'ctx'):
-                    if param.default == param.empty:
-                        usage += f" <{param.name}>"
-                    else:
-                        usage += f" [{param.name}]"
-            
-            error_message = f"```\n{usage}\n"
-            param_position = usage.find(f"<{error.param.name}>")
-            if param_position != -1:
-                spaces = " " * param_position
-                error_message += f"{spaces}^^^^\n"
-            error_message += "```"
-            
-            embed.description = f"Missing required argument: `{error.param.name}`"
-            embed.add_field(name="Correct Usage", value=error_message, inline=False)
-            
-        elif isinstance(error, commands.BadArgument):
-            
-            embed.description = "Invalid argument provided."
-            embed.add_field(name="Error Details", value=str(error), inline=False)
-            
-            if ctx.command:
-                usage = f"{ctx.prefix}{command_name}"
-                for param in ctx.command.params.values():
-                    if param.name not in ('self', 'ctx'):
-                        if param.default == param.empty:
-                            usage += f" <{param.name}>"
-                        else:
-                            usage += f" [{param.name}]"
-                embed.add_field(name="Correct Usage", value=f"```\n{usage}\n```", inline=False)
-            
-        elif isinstance(error, commands.MissingPermissions):
-            permissions = ', '.join([f"`{p.replace('_', ' ').title()}`" for p in error.missing_permissions])
-            embed.description = "You don't have permission to use this command."
-            embed.add_field(name="Missing Permissions", value=permissions, inline=False)
-            
-        elif isinstance(error, commands.BotMissingPermissions):
-            
-            permissions = ', '.join([f"`{p.replace('_', ' ').title()}`" for p in error.missing_permissions])
-            embed.description = "I don't have permission to execute this command."
-            embed.add_field(name="Missing Bot Permissions", value=permissions, inline=False)
-            
-        elif isinstance(error, commands.CommandOnCooldown):
-            
-            embed.description = "This command is on cooldown."
-            embed.add_field(name="Try Again In", value=f"{error.retry_after:.1f} seconds", inline=False)
-            
-        elif isinstance(error, commands.CheckFailure):
-            
-            embed.description = "You do not have permission to use this command."
-            
-        elif isinstance(error, commands.MaxConcurrencyReached):
-            
-            embed.description = "This command is already being used in too many places."
-            embed.add_field(name="Limit", value=f"{error.number} per {error.per.name}", inline=False)
-            
-        else:
-            
-            print(f"Ignoring exception in command {ctx.command}:", file=sys.stderr)
-            traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
-            
-            embed.description = f"An unexpected error occurred while running this command."
-            embed.add_field(name="Error Type", value=f"`{type(error).__name__}`", inline=False)
-            
-            if self.bot.owner_id and ctx.author.id == self.bot.owner_id:
-                tb = "".join(traceback.format_exception(type(error), error, error.__traceback__))
-                if len(tb) > 1000:
-                    tb = tb[:1000] + "..."
-                embed.add_field(name="Error Details", value=f"```py\n{tb}\n```", inline=False)
-        
+        """Handle command errors"""
         try:
-            await ctx.send(embed=embed)
-        except nextcord.HTTPException:
+            # Log the error
+            logger.error(f"Command error in {ctx.command}: {error}")
             
-            await ctx.send("An error occurred. Please try again later.")
+            # Send error to webhook
+            await self.send_error_webhook(error, ctx)
+            
+            # Create error embed
+            embed = nextcord.Embed(
+                title="❌ Error",
+                color=0xFF0000,
+                timestamp=datetime.datetime.now()
+            )
+            
+            # Handle different types of errors
+            if isinstance(error, commands.MissingPermissions):
+                embed.description = "You don't have permission to use this command."
+                embed.add_field(
+                    name="Required Permissions",
+                    value="\n".join(f"• {perm.replace('_', ' ').title()}" for perm in error.missing_permissions),
+                    inline=False
+                )
+            
+            elif isinstance(error, commands.BotMissingPermissions):
+                embed.description = "I don't have the required permissions to do that."
+                embed.add_field(
+                    name="Missing Permissions",
+                    value="\n".join(f"• {perm.replace('_', ' ').title()}" for perm in error.missing_permissions),
+                    inline=False
+                )
+            
+            elif isinstance(error, commands.MissingRequiredArgument):
+                embed.description = f"Missing required argument: `{error.param.name}`"
+                if ctx.command.help:
+                    embed.add_field(
+                        name="Usage",
+                        value=f"```{ctx.prefix}{ctx.command.name} {ctx.command.signature}```",
+                        inline=False
+                    )
+                    embed.add_field(
+                        name="Help",
+                        value=ctx.command.help,
+                        inline=False
+                    )
+            
+            elif isinstance(error, commands.BadArgument):
+                embed.description = "Invalid argument provided."
+                if ctx.command.help:
+                    embed.add_field(
+                        name="Usage",
+                        value=f"```{ctx.prefix}{ctx.command.name} {ctx.command.signature}```",
+                        inline=False
+                    )
+                    embed.add_field(
+                        name="Help",
+                        value=ctx.command.help,
+                        inline=False
+                    )
+            
+            elif isinstance(error, commands.CommandOnCooldown):
+                embed.description = "This command is on cooldown."
+                embed.add_field(
+                    name="Time Remaining",
+                    value=f"Try again in {error.retry_after:.1f} seconds",
+                    inline=False
+                )
+            
+            elif isinstance(error, commands.NoPrivateMessage):
+                embed.description = "This command cannot be used in private messages."
+            
+            elif isinstance(error, commands.CheckFailure):
+                embed.description = "You don't meet the requirements to use this command."
+            
+            else:
+                # For unexpected errors
+                embed.description = "An unexpected error occurred."
+                embed.add_field(
+                    name="Error Details",
+                    value=f"```{str(error)[:1000]}```",
+                    inline=False
+                )
+            
+            # Add footer with error ID
+            error_id = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+            embed.set_footer(text=f"Error ID: {error_id}")
+            
+            # Send the error message
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            # If error handling fails, log it
+            logger.critical(f"Error in error handler: {e}")
+            logger.critical(traceback.format_exc())
+            
+            # Try to send a basic error message
+            try:
+                await ctx.send("❌ An error occurred while processing your command. Please try again later.")
+            except:
+                pass
 
 def setup(bot):
     bot.add_cog(ErrorHandler(bot))
